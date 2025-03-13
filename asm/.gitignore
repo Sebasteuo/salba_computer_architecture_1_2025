@@ -1,0 +1,6 @@
+*.o
+read_image
+mi_binario_limpio
+imagen_in.img
+dump.txt
+read_image_BACKUP.asm
