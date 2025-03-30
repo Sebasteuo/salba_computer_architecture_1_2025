@@ -1,3 +1,10 @@
+; ===========================================================================
+; main.asm (x86_64, NASM)
+; Lee ruta + cuadrante desde config.txt, procesa imagen 400x400,
+; extrae sub-bloque 100x100, interpola a 200x200 y genera imagen_out.img.
+; Se han eliminado todas las referencias a quad.txt.
+; ===========================================================================
+
 [bits 64]
 default rel
 
@@ -5,82 +12,81 @@ global _start
 
 section .data
 
-    ; Nombres de archivos
-    fname_in     db "imagen_in.img", 0
-    fname_out    db "imagen_out.img", 0
-    fname_quad   db "quad.txt", 0
-
+    ; Archivos
+    fname_out     db "imagen_out.img", 0
+    fname_config  db "config.txt", 0   ; Contendrá:
+                                       ;   1) Ruta de la imagen en la 1era línea
+                                       ;   2) Cuadrante (1..16) en la 2da línea
+    
     ; Mensajes
-    prompt_quad db "Ingrese el cuadrante (1..16): ", 0
-prompt_quad_end:
+    msg_bytes_read        db "Bytes leidos (hex): 0x", 0
+    msg_bytes_read_end:
 
-    msg_invalid db "Valor no valido. Intente de nuevo.", 10, 0
-msg_invalid_end:
+    msg_checksum_sub      db "Checksum sub-bloque (hex): 0x", 0
+    msg_checksum_sub_end:
 
-    msg_bytes_read db "Bytes leidos (hex): 0x", 0
-msg_bytes_read_end:
+    msg_checksum_interp   db "Checksum imagen interpolada (hex): 0x", 0
+    msg_checksum_interp_end:
 
-    msg_checksum_sub db "Checksum sub-bloque (hex): 0x", 0
-msg_checksum_sub_end:
+    msg_done              db "Procesamiento finalizado. Se genero imagen_out.img", 10, 0
+    msg_done_end:
 
-    msg_checksum_interp db "Checksum imagen interpolada (hex): 0x", 0
-msg_checksum_interp_end:
+    new_line              db 10, 0
 
-    msg_done db "Procesamiento finalizado. Se genero imagen_out.img y quad.txt", 10, 0
-msg_done_end:
-
-    ; Salto de linea
-    new_line db 10, 0
-
-    debug_msg db "[DEBUG] quad_msg_buffer = ", 0
-debug_msg_end:
-
-    debug_len db "[DEBUG] length = 0x", 0
-debug_len_end:
+    msg_error_config      db "Error: config.txt malformado o cuadrante invalido.", 10, 0
+    msg_error_config_end:
 
 section .bss
-    buffer         resb 400*400      ; 160000
-    quad_buffer    resb 100*100      ; sub-bloque
-    interp_buffer  resb 200*200      ; interpolado
-    read_count     resq 1
-    quadrant       resd 1
+    ; Buffers de trabajo
+    buffer          resb 400*400      ; 160.000 bytes
+    quad_buffer     resb 100*100      ; sub-bloque 100x100
+    interp_buffer   resb 200*200      ; interpolado 200x200
 
-    row_var        resd 1
-    col_var        resd 1
+    ; Para guardar cuántos bytes se leyeron de la imagen
+    read_count      resq 1
 
-    quad_input     resb 4            ; leer 1..2 digitos + \n
-    quad_msg_buffer resb 16          ; "7\n\0"
+    ; Variables de uso
+    quadrant        resd 1
+    row_var         resd 1
+    col_var         resd 1
+
+    ; Para leer config
+    config_buffer   resb 256          ; leemos hasta 256 bytes de config.txt
+    path_buffer     resb 240          ; donde guardamos la ruta de la imagen
+    quad_input      resb 4            ; "7", "12", etc.
 
 section .text
 
-; ----------------------------------------------------------------------------
-; _start: flujo
-; 1) Pedir cuadrante
-; 2) Leer imagen_in
-; 3) Sub-bloque
-; 4) Interpolar
-; 5) out.img
-; 6) Escribir quadrant en quad.txt
-; 7) Imprimir checksums
-; 8) exit(0)
-; ----------------------------------------------------------------------------
+; ===========================================================================
+; _start
+; ===========================================================================
+; Flujo principal:
+;   1) Leer config.txt => path_buffer, quadrant
+;   2) Abrir/leer la imagen en buffer (400x400)
+;   3) Extraer sub-bloque 100x100
+;   4) Interpolar => 200x200
+;   5) Guardar en imagen_out.img
+;   6) Imprimir checksums, mensaje final
+;   7) exit(0)
+; ===========================================================================
 _start:
-    sub rsp, 8
+    sub rsp, 8  ; por seguridad/alineación
 
-    ; (1) Pide quadrant
-    call read_quadrant_in_loop
+    ; 1) Leer config => path imagen + quadrant
+    call read_config_from_file
 
-    ; (2) open/read imagen_in.img
-    mov rax, 2
-    mov rdi, fname_in
-    xor rsi, rsi
+    ; 2) Abrir la imagen usando path_buffer
+    mov rax, 2             ; sys_open
+    mov rdi, path_buffer   ; path leído de config.txt
+    xor rsi, rsi           ; O_RDONLY
     xor rdx, rdx
     syscall
     cmp rax, 0
     js error_open_in
-    mov rbx, rax
+    mov rbx, rax           ; fd imagen en rbx
 
-    mov rax, 0
+    ; Leer la imagen completa (400x400 = 160000 bytes)
+    mov rax, 0             ; sys_read
     mov rdi, rbx
     mov rsi, buffer
     mov rdx, 400*400
@@ -89,25 +95,26 @@ _start:
     js error_read_in
     mov [read_count], rax
 
-    ; close
-    mov rax, 3
+    ; Cerrar la imagen
+    mov rax, 3             ; sys_close
     mov rdi, rbx
     syscall
 
-    ; (3) sub-bloque
-    mov eax, [quadrant]
-    dec eax
+    ; 3) Extraer sub-bloque 100x100 según el cuadrante
+    ;    quadrant (1..16) => fila,col en [0..3]
+    mov eax, [quadrant]  ; 1..16
+    dec eax              ; 0..15
     xor edx, edx
     mov edi, 4
-    div edi
-    mov r14, rax  ; fila
-    mov r15, rdx  ; col
+    div edi              ; EAX=fila(0..3), EDX=col(0..3)
+    mov r14, rax         ; fila
+    mov r15, rdx         ; col
 
     mov r12, 100
     mov r13, 100
 
-    imul r15, r12  ; col*100
-    imul r14, r13  ; fila*100
+    imul r15, r12   ; col * 100
+    imul r14, r13   ; fila * 100
 
     xor r8, r8
 copy_rows:
@@ -149,7 +156,7 @@ end_copy_row:
 
 done_copy:
 
-    ; (4) Interpolar => 200x200
+    ; 4) Interpolar => 200x200
     xor eax, eax
     mov [row_var], eax
 
@@ -159,7 +166,7 @@ interp_outer_row:
     jge done_interp
 
     mov r8d, eax
-    shl r8, 1
+    shl r8, 1  ; r8 = row*2
 
     xor edx, edx
     mov [col_var], edx
@@ -185,6 +192,7 @@ interp_inner_col:
     add r11d, 1
 .no_cplus:
 
+    ; Píxeles originales en el sub-bloque
     mov eax, [row_var]
     mov edx, [col_var]
 
@@ -193,32 +201,33 @@ interp_inner_col:
     imul ecx, 100
     add ecx, edx
     add rsi, rcx
-    movzx r14, byte [rsi]
+    movzx r14, byte [rsi]  ; A
 
     mov rsi, quad_buffer
     mov ecx, r10d
     imul ecx, 100
     add ecx, edx
     add rsi, rcx
-    movzx r15, byte [rsi]
+    movzx r15, byte [rsi]  ; B
 
     mov rsi, quad_buffer
     mov ecx, eax
     imul ecx, 100
     add ecx, r11d
     add rsi, rcx
-    movzx rdi, byte [rsi]
+    movzx rdi, byte [rsi]  ; C
 
     mov rsi, quad_buffer
     mov ecx, r10d
     imul ecx, 100
     add ecx, r11d
     add rsi, rcx
-    movzx rsi, byte [rsi]
+    movzx rsi, byte [rsi]  ; D
 
     mov r9d, [col_var]
-    shl r9, 1
+    shl r9, 1  ; col*2
 
+    ; (row*2, col*2) => A
     mov rcx, r8
     imul rcx, 200
     add rcx, r9
@@ -226,19 +235,20 @@ interp_inner_col:
     add rdx, rcx
     mov [rdx], r14b
 
+    ; (row*2+1, col*2) => average(A,B) => (3*A + B) / 4
     mov rcx, r8
     add rcx, 1
     imul rcx, 200
     add rcx, r9
     mov rdx, interp_buffer
     add rdx, rcx
-
     mov rax, r14
     imul rax, 3
     add rax, r15
     shr rax, 2
     mov [rdx], al
 
+    ; (row*2, col*2+1) => average(A,C) => (3*A + C) / 4
     mov rcx, r8
     imul rcx, 200
     mov rdx, r9
@@ -246,13 +256,13 @@ interp_inner_col:
     add rcx, rdx
     mov rdx, interp_buffer
     add rdx, rcx
-
     mov rax, r14
     imul rax, 3
     add rax, rdi
     shr rax, 2
     mov [rdx], al
 
+    ; (row*2+1, col*2+1) => average(A,B,C,D) => (A + B + C + D)/4
     mov rcx, r8
     add rcx, 1
     imul rcx, 200
@@ -261,7 +271,6 @@ interp_inner_col:
     add rcx, rdx
     mov rdx, interp_buffer
     add rdx, rcx
-
     mov rax, r14
     add rax, r15
     add rax, rdi
@@ -269,6 +278,7 @@ interp_inner_col:
     shr rax, 2
     mov [rdx], al
 
+    ; siguiente columna
     mov eax, [col_var]
     inc eax
     mov [col_var], eax
@@ -282,7 +292,7 @@ end_interp_row:
 
 done_interp:
 
-    ; (5) Crear imagen_out.img
+    ; 5) Crear imagen_out.img
     mov rax, 2
     mov rdi, fname_out
     mov rsi, 577   ; O_WRONLY|O_CREAT|O_TRUNC
@@ -292,7 +302,7 @@ done_interp:
     js error_open_out
     mov rbx, rax
 
-    ; write => 200*200
+    ; Escribir => 200*200 = 40000 bytes
     mov rax, 1
     mov rdi, rbx
     mov rsi, interp_buffer
@@ -301,84 +311,13 @@ done_interp:
     cmp rax, 0
     js error_write_out
 
-    ; close
+    ; cerrar out
     mov rax, 3
     mov rdi, rbx
     syscall
 
-    ; (6) Convertir quadrant => "7\n"
-    mov eax, [quadrant]
-    call parse_quadrant_to_ascii
-
-    ; [DEBUG] Imprimir en consola el debug_msg y el contenido de quad_msg_buffer
-    ; "quad_msg_buffer="
-    mov rax, 1
-    mov rdi, 1
-    mov rsi, debug_msg
-    mov rdx, debug_msg_end - debug_msg
-    syscall
-
-    ; luego quad_msg_buffer
-    mov rax, 1
-    mov rdi, 1
-    mov rsi, quad_msg_buffer
-    mov rdx, 16
-    syscall
-
-    ; salto de linea
-    mov rax, 1
-    mov rdi, 1
-    mov rsi, new_line
-    mov rdx, 1
-    syscall
-
-    ; Calcular longitud => strlength
-    mov rdi, quad_msg_buffer
-    call strlength
-    mov rcx, rax
-
-    ; [DEBUG] Imprimir debug_len + el valor en hex
-    mov rax, 1
-    mov rdi, 1
-    mov rsi, debug_len
-    mov rdx, debug_len_end - debug_len
-    syscall
-
-    mov rdi, rcx
-    call print_hex
-
-    ; new line
-    mov rax, 1
-    mov rdi, 1
-    mov rsi, new_line
-    mov rdx, 1
-    syscall
-
-    ; Abrir quad.txt
-    mov rax, 2
-    mov rdi, fname_quad
-    mov rsi, 577
-    mov rdx, 420
-    syscall
-    cmp rax, 0
-    js error_open_quad
-    mov rbx, rax
-
-    ; write => quad_msg_buffer, rcx
-    mov rax, 1
-    mov rdi, rbx
-    mov rsi, quad_msg_buffer
-    mov rdx, rcx
-    syscall
-    cmp rax, 0
-    js error_write_quad
-
-    ; close
-    mov rax, 3
-    mov rdi, rbx
-    syscall
-
-    ; (7) Checksum sub-bloque e interpolado
+    ; 6) Calcular e imprimir checksums
+    ; -- sub-bloque 100x100 --
     xor rax, rax
     xor r8, r8
 csum_sub_rows:
@@ -409,7 +348,7 @@ end_sub_row:
 csum_sub_done:
     mov r12, rax
 
-    ; Interpolado
+    ; -- interpolado 200x200 --
     xor rax, rax
     xor r8, r8
 csum_interp_rows:
@@ -440,7 +379,8 @@ end_interp_sum_row2:
 csum_interp_done:
     mov r13, rax
 
-    ; Imprimir bytes leidos
+    ; Imprimir en pantalla
+    ; (a) Bytes leídos
     mov rax, 1
     mov rdi, 1
     mov rsi, msg_bytes_read
@@ -450,14 +390,14 @@ csum_interp_done:
     mov rdi, [read_count]
     call print_hex
 
-    ; new line
+    ; newline
     mov rax, 1
     mov rdi, 1
     mov rsi, new_line
     mov rdx, 1
     syscall
 
-    ; "Checksum sub-bloque (hex): 0x"
+    ; (b) Checksum sub-bloque
     mov rax, 1
     mov rdi, 1
     mov rsi, msg_checksum_sub
@@ -467,14 +407,14 @@ csum_interp_done:
     mov rdi, r12
     call print_hex
 
-    ; new line
+    ; newline
     mov rax, 1
     mov rdi, 1
     mov rsi, new_line
     mov rdx, 1
     syscall
 
-    ; "Checksum imagen interpolada (hex): 0x"
+    ; (c) Checksum interpolado
     mov rax, 1
     mov rdi, 1
     mov rsi, msg_checksum_interp
@@ -484,6 +424,7 @@ csum_interp_done:
     mov rdi, r13
     call print_hex
 
+    ; newline
     mov rax, 1
     mov rdi, 1
     mov rsi, new_line
@@ -502,48 +443,122 @@ csum_interp_done:
     xor rdi, rdi
     syscall
 
-; -------------------------------------------------------------------------
-; read_quadrant_in_loop
-; -------------------------------------------------------------------------
-read_quadrant_in_loop:
+; ===========================================================================
+; read_config_from_file:
+;   Lee config.txt:
+;     - Primera linea => path de la imagen => path_buffer
+;     - Segunda linea => cuadrante (1..16) => [quadrant]
+; ===========================================================================
+read_config_from_file:
     push rbp
     mov rbp, rsp
 
-.ask_loop:
-    ; "Ingrese el cuadrante (1..16):"
-    mov rax, 1
-    mov rdi, 1
-    mov rsi, prompt_quad
-    mov rdx, prompt_quad_end - prompt_quad
+    ; 1) Abrir config.txt en modo lectura (O_RDONLY)
+    mov rax, 2             ; sys_open
+    mov rdi, fname_config
+    xor rsi, rsi           ; flags=0 => O_RDONLY
+    xor rdx, rdx
+    syscall
+    cmp rax, 0
+    js  error_open_config
+    mov rbx, rax
+
+    ; 2) Leer hasta 256 bytes
+    mov rax, 0             ; sys_read
+    mov rdi, rbx
+    mov rsi, config_buffer
+    mov rdx, 256
+    syscall
+    cmp rax, 0
+    js  error_read_config
+    ; rax = bytes leídos
+
+    ; cerrar config.txt
+    mov rax, 3             ; sys_close
+    mov rdi, rbx
     syscall
 
-    mov rax, 0
-    mov rdi, 0
-    mov rsi, quad_input
-    mov rdx, 3
-    syscall
+    ; 3) Parsear la primera linea => path_buffer
+    xor rcx, rcx   ; índice en config_buffer
+    xor rdx, rdx   ; índice en path_buffer
+.find_path_loop:
+    mov al, [config_buffer + rcx]
+    cmp al, 0
+    je .error_bad_config   ; fin de buffer sin encontrar '\n'
+    cmp al, 10
+    je .end_path
+    mov [path_buffer + rdx], al
+    inc rcx
+    inc rdx
+    cmp rdx, 240
+    jae .error_bad_config
+    jmp .find_path_loop
 
+.end_path:
+    mov byte [path_buffer + rdx], 0
+    inc rcx  ; saltamos el '\n'
+
+    ; 4) Segunda linea => cuadrante => quad_input
+    xor rdx, rdx
+.next_line_loop:
+    mov al, [config_buffer + rcx]
+    cmp al, 0
+    je .maybe_ok
+    cmp al, 10
+    je .end_quad
+    mov [quad_input + rdx], al
+    inc rcx
+    inc rdx
+    cmp rdx, 3
+    jae .end_quad
+    jmp .next_line_loop
+
+.end_quad:
+    mov byte [quad_input + rdx], 0
+
+.maybe_ok:
+
+    ; convertir quad_input => número en [quadrant]
     call parse_quadrant
 
+    ; validar 1..16
     mov eax, [quadrant]
     cmp eax, 1
-    jl .error
+    jl .error_range
     cmp eax, 16
-    jg .error
+    jg .error_range
+
     leave
     ret
 
-.error:
-    mov rax, 1
-    mov rdi, 1
-    mov rsi, msg_invalid
-    mov rdx, msg_invalid_end - msg_invalid
+.error_bad_config:
+.error_range:
+.fail:
+    ; Mensaje de error y salir
+    mov rax, 1            ; sys_write
+    mov rdi, 1            ; STDOUT
+    mov rsi, msg_error_config
+    mov rdx, msg_error_config_end - msg_error_config
     syscall
-    jmp .ask_loop
 
-; -------------------------------------------------------------------------
-; parse_quadrant: conv a entero => quadrant=0 si inval
-; -------------------------------------------------------------------------
+    mov rax, 60           ; sys_exit
+    mov rdi, 1            ; código de salida
+    syscall
+
+error_open_config:
+    mov rax, 60
+    mov rdi, 17
+    syscall
+
+error_read_config:
+    mov rax, 60
+    mov rdi, 18
+    syscall
+
+; ===========================================================================
+; parse_quadrant: Convierte quad_input (ASCII) => [quadrant] (entero).
+;   Ej: "7" -> 7, "12" -> 12, etc.
+; ===========================================================================
 parse_quadrant:
     push rbp
     mov rbp, rsp
@@ -551,15 +566,19 @@ parse_quadrant:
     mov rsi, quad_input
     xor r8, r8
 
+    ; Primer dígito
     mov al, [rsi]
-    cmp al, 10
+    cmp al, 0
     je .no_digits
     sub al, '0'
     cmp al, 9
     ja .not_digit
-    mov r8, rax
+    mov r8, rax   ; primer dígito
 
+    ; Segundo dígito opcional
     mov al, [rsi+1]
+    cmp al, 0
+    je .ok
     cmp al, 10
     je .ok
     sub al, '0'
@@ -568,6 +587,7 @@ parse_quadrant:
 
     imul r8, r8, 10
     add r8, rax
+
     jmp .ok
 
 .not_digit:
@@ -584,76 +604,9 @@ parse_quadrant:
     leave
     ret
 
-; -------------------------------------------------------------------------
-; parse_quadrant_to_ascii: EAX => 1..16 => "7\n"
-; -------------------------------------------------------------------------
-parse_quadrant_to_ascii:
-    push rbp
-    mov rbp, rsp
-
-    ; Limpia
-    mov rdi, quad_msg_buffer
-    mov rcx, 16
-.clear_loop:
-    mov byte [rdi + rcx - 1], 0
-    loop .clear_loop
-
-    mov r8d, eax
-    mov rdi, quad_msg_buffer
-
-    cmp r8d, 9
-    jle .one_digit
-
-    ; 2 digitos
-    xor edx, edx
-    mov eax, r8d
-    mov ebx, 10
-    div ebx
-    add eax, '0'
-    mov [rdi], al
-    inc rdi
-
-    add dl, '0'
-    mov [rdi], dl
-    inc rdi
-    jmp .ok
-
-.one_digit:
-    add r8b, '0'
-    mov [rdi], r8b
-    inc rdi
-
-.ok:
-    mov byte [rdi], 10
-    inc rdi
-    mov byte [rdi], 0
-
-    leave
-    ret
-
-; -------------------------------------------------------------------------
-; strlength => RAX = len
-; RDI => puntero
-; -------------------------------------------------------------------------
-strlength:
-    push rbp
-    mov rbp, rsp
-
-    xor rax, rax
-.loop_len:
-    mov bl, [rdi]
-    cmp bl, 0
-    je .done
-    inc rax
-    inc rdi
-    jmp .loop_len
-.done:
-    leave
-    ret
-
-; -------------------------------------------------------------------------
-; print_hex: imprime RDI en hex 16 digitos
-; -------------------------------------------------------------------------
+; ===========================================================================
+; print_hex: Imprime en pantalla RDI en hex de 16 dígitos
+; ===========================================================================
 print_hex:
     push rbp
     mov rbp, rsp
@@ -675,15 +628,17 @@ print_hex:
     and rbx, 0xF
     cmp rbx, 10
     jb .digit0_9
-    add rbx, 55
+    add rbx, 55    ; 'A' (65) - 10 = 55
     jmp .store_char
+
 .digit0_9:
-    add rbx, 48
+    add rbx, 48    ; '0'
 .store_char:
     mov byte [rsi + rcx - 1], bl
     shr rax, 4
     loop .hex_conv
 
+    ; escribir
     mov rax, 1
     mov rdi, 1
     mov rdx, 16
@@ -694,7 +649,9 @@ print_hex:
     leave
     ret
 
-; Manejo errores
+; ===========================================================================
+; Manejo de errores de apertura/lectura/escritura de archivos
+; ===========================================================================
 error_open_in:
     mov rax, 60
     mov rdi, 11
@@ -713,15 +670,5 @@ error_open_out:
 error_write_out:
     mov rax, 60
     mov rdi, 14
-    syscall
-
-error_open_quad:
-    mov rax, 60
-    mov rdi, 15
-    syscall
-
-error_write_quad:
-    mov rax, 60
-    mov rdi, 16
     syscall
 
