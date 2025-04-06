@@ -1,6 +1,13 @@
 
 1. Generar la imagen_in.img con el siguiente comando
-
+convert ruta o nombre_imagen_entrada u original \
+  -colorspace Gray \
+  -depth 8 \
+  -resize 400x400\! \
+  -type Grayscale \
+  gray:imagen_in.img
+  
+  
 2. Escribir en el config.txt la ruta de la imagen y el cuadrante
 
 3. Compilar el procesamiento
