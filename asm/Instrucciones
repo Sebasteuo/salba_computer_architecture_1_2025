@@ -1,0 +1,14 @@
+
+1. Generar la imagen_in.img con el siguiente comando
+
+2. Escribir en el config.txt la ruta de la imagen y el cuadrante
+
+3. Compilar el procesamiento
+
+4. Antes de abrir la interfaz se puede comprobar el funcionamiento del procesamiento ejecutando estos scripts de python, estos scripts son uno por uno para verificar cada proceso por separado:
+
+	4.1 1_ver_imagen_in_sin_tratar.py> para ver la imagen cruda que entra a el procesamiento
+	4.2 En otra terminal en el mismo folder ejecutar 2_ver_cuadrante_seleccionado.py> para ver el cuadrante seleccionadosin ser procesado
+	4.3 En otra termina en el mismo folder ejecutar 3_ver_imagen_out(cuadrante)_tratada.py> para ver el cuadrante seleccionado ya finalmente procesado
+	
+5. Abrir la interfaz y alli seleccionar la imagen y el cuadrante que se quiere. En esta interfaz se logra visualizar todo por completo y junto.
