@@ -1,0 +1,31 @@
+Demostraciones archivo imagen_in.img CUMPLE:
+
+1. Es gris?
+
+Cada píxel se describe por 1 solo byte (un único canal de intensidad). No hay cabeceras ni canales de color separados. El hecho de que tenga 1 byte por píxel ya implica que solo hay un canal de luminancia (escala de grises).
+
+Tamaño del archivo: 
+400×400=160000 bytes.
+
+Si fuera color RGB, necesitaría 3 bytes por píxel (→ 480 000 bytes). Por lo tanto, con 160 000 bytes para 160 000 píxeles, la única manera de representarlos es un solo canal.
+
+
+2. 8 bits?
+
+400×400=160,000 píxeles.
+
+El archivo mide 160,000 bytes.
+
+Por ende, hay un byte para cada píxel => Un byte equivale a 8 bits. Así, 1 byte/píxel = 8 bits/píxel.
+
+
+
+3. RAW?
+
+Sin cabeceras ni metadatos.
+
+Cada píxel se describe por un conjunto fijo de bytes.
+
+1 canal => 1 byte/píxel => 8 bits/píxel.
+
+

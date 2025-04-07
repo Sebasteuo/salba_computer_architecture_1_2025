@@ -68,6 +68,19 @@ def main():
     axes[2].set_title("Interpolada (200x200)")
 
     plt.tight_layout()
+
+    # Aquí forzamos la ventana a abrir maximizada
+    mng = plt.get_current_fig_manager()
+    try:
+        # Esto funciona en backends como Qt5Agg
+        mng.window.showMaximized()
+    except:
+        # Si falla, otro intento (p.ej. TkAgg):
+        try:
+            mng.resize(*mng.window.maxsize())
+        except:
+            pass
+
     plt.show()
 
 if __name__=="__main__":
