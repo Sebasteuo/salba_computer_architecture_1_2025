@@ -7,15 +7,47 @@ convert ruta o nombre_imagen_entrada u original \
   -type Grayscale \
   gray:imagen_in.img
   
-  
+ -------------------------------------------------------------------------------------------------------------------------------------------------------------
 2. Escribir en el config.txt la ruta de la imagen y el cuadrante
 
-3. Compilar el procesamiento
+-------------------------------------------------------------------------------------------------------------------------------------------------------------
+3. Compilar el procesamiento:
 
-4. Antes de abrir la interfaz se puede comprobar el funcionamiento del procesamiento ejecutando estos scripts de python, estos scripts son uno por uno para verificar cada proceso por separado:
+nasm -f elf64 procesamiento.asm -o procesamiento.o
+ld -o procesamiento procesamiento.o
+./procesamiento
 
-	4.1 1_ver_imagen_in_sin_tratar.py> para ver la imagen cruda que entra a el procesamiento
-	4.2 En otra terminal en el mismo folder ejecutar 2_ver_cuadrante_seleccionado.py> para ver el cuadrante seleccionadosin ser procesado
-	4.3 En otra termina en el mismo folder ejecutar 3_ver_imagen_out(cuadrante)_tratada.py> para ver el cuadrante seleccionado ya finalmente procesado
+	a) Lee la imagen_in.img (400×400 = 160,000 bytes).
+
+	b) El programa muestra “Bytes leidos (hex): 0x0000000000027100”. En hexadecimal, 0x27100 = 160,000 en decimal.
+
+	c) Extrae el sub-bloque (100×100) según el quadrant especificado en config.txt
+
+	d) Interpola ese sub-bloque a 200×200.
+
+	e) Cálculo de checksums:
+
+	“Checksum sub-bloque (hex): 0x0000000000XXXXX”: suma de los 10,000 bytes del sub-bloque (100×100).
+
+	“Checksum imagen interpolada (hex): 0x0000000000XXXXX”: suma de los 40,000 bytes de la imagen de salida (200×200).
+
+	Genera el archivo imagen_out.img, con el resultado interpolado, y muestra el mensaje final
+
+-------------------------------------------------------------------------------------------------------------------------------------------------------------
+
+4. Antes de abrir la interfaz se puede comprobar el funcionamiento del procesamiento manualmente ejecutando estos scripts de python, estos scripts son uno por uno para verificar cada proceso por separado:
+
+	4.1 1_ver_imagen_in_sin_tratar.py> Para ver la imagen cruda que entra a el procesamiento (imagen_in.img)
+	4.2 2_ver_cuadrante_seleccionado> En otra terminal en el mismo folder ejecutar 2_ver_cuadrante_seleccionado.py imagen_in.img #Cuadrante para ver el cuadrante seleccionadosin ser procesado
+	4.3 _ver_imagen_out(cuadrante)_tratada.py> En otra termina en el mismo folder ejecutar 3_ver_imagen_out(cuadrante)_tratada.py para ver el cuadrante seleccionado ya finalmente procesado. Se debe ejecutar con comillas "3_ver_imagen_out(cuadrante)_tratada.py"
 	
+-------------------------------------------------------------------------------------------------------------------------------------------------------------
 5. Abrir la interfaz y alli seleccionar la imagen y el cuadrante que se quiere. En esta interfaz se logra visualizar todo por completo y junto.
+
+
+
+
+
+
+
+

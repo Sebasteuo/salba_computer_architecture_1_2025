@@ -1,52 +1,62 @@
 #!/usr/bin/env python3
+"""
+Este archivo se ejecuta con Python 3 en un entorno Unix-like.
+La línea 'shebang' indica dónde se ubica el intérprete de Python 3.
+"""
+
 # ---------------------------
-# IMPORTS 
+# IMPORTS / BIBLIOTECAS
 # ---------------------------
-import os           # Para operaciones del sistema (por ejemplo, comprobar si existe un archivo).
-import subprocess   # Para invocar procesos externos (llamar a 'convert' de ImageMagick o ejecutar el ensamblador).
-import tkinter as tk            # para GUIs (interfaz gráfica).
+import os           # Para realizar operaciones del sistema (por ejemplo, comprobar si existe un archivo).
+import subprocess   # Para invocar procesos externos (p.ej., llamar a 'convert' de ImageMagick o ejecutar el ensamblador).
+import tkinter as tk            # Tkinter es la biblioteca estándar de Python para crear GUIs (interfaz gráfica).
 from tkinter import ttk, filedialog, messagebox
 """
-- ttk: widgets (botones)
-- filedialog: Permite abrir diálogos para seleccionar archivos, guardar archivos...
+- ttk: Ofrece widgets 'tematizados' (botones, marcos, etc.) con estilos más modernos.
+- filedialog: Permite abrir diálogos para seleccionar archivos, guardar archivos, etc.
 - messagebox: Para mostrar ventanas emergentes de aviso, error o confirmación.
 """
 
-import numpy as np              # para manejar arreglos de datos (por ejemplo, leer datos crudos en bytes y convertirlos a imágenes).
+import numpy as np              # Numpy para manejar arreglos de datos (por ejemplo, leer datos crudos en bytes y convertirlos a imágenes).
 from PIL import Image, ImageTk  # PIL (Pillow) para manipular imágenes en Python; ImageTk para mostrar imágenes en Tkinter.
-import matplotlib               # para dibujar gráficos y meterlos en Tkinter.
+import matplotlib               # Matplotlib para dibujar gráficos e incrustarlos en Tkinter.
 matplotlib.use("TkAgg")
 """
-"TkAgg" para que matplotlib dibuje dentro de un widget de Tkinter.
+- Se especifica el backend "TkAgg" para que matplotlib dibuje dentro de un widget de Tkinter.
 """
 
 from matplotlib.backends.backend_tkagg import FigureCanvasTkAgg
 """
-- FigureCanvasTkAgg: para integrar el gráfico de Matplotlib directamente en un widget de Tkinter.
+- FigureCanvasTkAgg: Permite integrar la figura (gráfico) de Matplotlib directamente en un widget de Tkinter.
 """
 
 from matplotlib.figure import Figure
 """
-- Figure: donde creamos subplots y dibujamos.
+- Figure: Objeto principal de Matplotlib donde creamos subplots y dibujamos.
 """
 
 import matplotlib.patches as patches
 import matplotlib.patheffects as pe
 """
-- patches: Para dibujar figuras geométricas (rectángulos) dentro de la figura de Matplotlib.
+- patches: Para dibujar figuras geométricas (rectángulos, círculos, etc.) dentro de la figura de Matplotlib.
 - patheffects: Efectos de trazo para resaltar líneas o textos.
 """
 
 import cv2
 """
-- para manipular la cámara (Live View). Permite capturar fotos, leer frames de la webcam, etc.
+- OpenCV (cv2) para manipular la cámara (Live View). Permite capturar fotos, leer frames de la webcam, etc.
 """
 
 
 # ------------------------------------------------------------------------------
-# Clase: ToolTip VENTANAS EMERGENTES DESCRIPTIVAS AL PASAR EL MOUSE ENCIMA
+# Clase: ToolTip
 # ------------------------------------------------------------------------------
 class ToolTip:
+    """
+    Esta clase se encarga de crear pequeñas ventanas emergentes (tooltips) al
+    pasar el ratón por encima de un widget específico, mostrando un texto
+    descriptivo. Ayuda a dar 'hints' al usuario sobre la función de un botón.
+    """
     def __init__(self, widget, text):
         """
         Constructor:
@@ -99,9 +109,13 @@ class ToolTip:
         self.tipwindow = None
 
 
-############################################################## Clase: IntroWindow VENTANA DE BIENVENIDA #####################################################################
+# ------------------------------------------------------------------------------
+# Clase: IntroWindow
+# ------------------------------------------------------------------------------
 class IntroWindow(tk.Toplevel):
-    """Ocupa 1200x800 píxeles.
+    """
+    IntroWindow es la ventana de bienvenida. Ocupa 1200x800 píxeles.
+    - Muestra texto sobre la interpolación bilineal.
     - Permite al usuario cargar una imagen y la muestra en grande en la propia ventana.
     - Botón "Comenzar" cierra esta ventana y muestra la ventana principal (App).
     """
@@ -169,7 +183,7 @@ class IntroWindow(tk.Toplevel):
         icons_frame = ttk.Frame(frame)
         icons_frame.pack(side=tk.BOTTOM, pady=30)
 
-        # íconos para "Cargar" y "Comenzar"
+        # Preparamos íconos para "Cargar" y "Comenzar"
         icon_size = (64, 64)
         upload_img = Image.open("upload.png").resize(icon_size, Image.LANCZOS)
         self.upload_icon = ImageTk.PhotoImage(upload_img)
@@ -199,11 +213,10 @@ class IntroWindow(tk.Toplevel):
         # Si cierra esta ventana sin Comenzar, se cierra toda la aplicación
         self.protocol("WM_DELETE_WINDOW", self.salir)
 
-
-#-----------------------------------------------CARGAR IMAGEN-----------------------------------------------
     def cargar_imagen(self):
         """
         Abre un diálogo para seleccionar imagen, la muestra en grande (600x400).
+        No muestra messagebox, sino que actualiza el label 'lbl_mini_imagen'.
         """
         file_path = filedialog.askopenfilename(
             title="Seleccionar imagen (JPG/PNG)",
@@ -214,7 +227,7 @@ class IntroWindow(tk.Toplevel):
             try:
                 # Abrimos la imagen con Pillow
                 im = Image.open(file_path)
-                # Ajustamos a un tamaño grande, digamos que 600x400
+                # Ajustamos a un tamaño grande, p.e. 600x400
                 im.thumbnail((600, 400))
                 imgtk = ImageTk.PhotoImage(im)
                 self.lbl_mini_imagen.config(image=imgtk)
@@ -224,8 +237,6 @@ class IntroWindow(tk.Toplevel):
             # Al cargar imagen, habilitamos 'Comenzar'
             self.btn_comenzar.config(state="normal")
 
-
-#-----------------------------------------------COMENZAR-----------------------------------------------
     def comenzar(self):
         """
         Función que cierra esta ventana e inmediatamente muestra la ventana principal.
@@ -248,10 +259,12 @@ class IntroWindow(tk.Toplevel):
         self.parent.destroy()
 
 
-############################################################## Clase: GRILLA 16 CUADRANTES PARA SELECCIONAR #################################################################
-
+# ------------------------------------------------------------------------------
+# Clase: QuadrantSelector
+# ------------------------------------------------------------------------------
 class QuadrantSelector(tk.Frame):
     """
+    QuadrantSelector: Muestra una grilla 4x4 (16 celdas).
     - Cada celda tiene un número (1..16).
     - Al pasar el ratón, se ilumina un poco.
     - Al hacer clic, parpadea unas veces y queda en amarillo, llamando un callback
@@ -334,11 +347,13 @@ class QuadrantSelector(tk.Frame):
                 self.callback(q)
 
 
-############################################################## Clase: VENTANA PRINCIPAL DE PROCESAMIENTO #################################################################
-
+# ------------------------------------------------------------------------------
+# Clase: App (Ventana Principal)
+# ------------------------------------------------------------------------------
 class App(tk.Tk):
     """
-    - Muestra la imagen original en la parte izq, y en la dere cha la cuadrícula 4x4 y
+    App es la ventana principal (1200x800):
+    - Muestra la imagen original en la parte izq, y en la der la cuadrícula 4x4 y
       los botones (Cargar, Live, Procesar).
     - Abajo, tres subplots (Convertida, Cuadrante, Final) con animaciones de fade in y highlight.
     - Se crea un IntroWindow al inicio para la bienvenida. Cuando el usuario cierra la intro,
@@ -346,7 +361,7 @@ class App(tk.Tk):
     """
     def __init__(self):
         super().__init__()
-        self.title("Procesamiento Interpolado Bilineal")
+        self.title("Procesamiento - Live View 'puro'")
         self.geometry("1200x800")
         self.configure(bg="black")
 
@@ -399,7 +414,7 @@ class App(tk.Tk):
 
     def create_widgets(self):
         """
-        Crea todos los frames, labels, botones, subplots, etc.
+        create_widgets: Crea todos los frames, labels, botones, subplots, etc.
         de la ventana principal.
         """
         # Marco principal con padding=10
@@ -481,7 +496,7 @@ class App(tk.Tk):
             command=self.run_full_process
         )
         btn_process.pack(side=tk.LEFT, padx=5)
-        ToolTip(btn_process, "Procesar la imagen")
+        ToolTip(btn_process, "Procesar la imagen\n(animación y cuadrícula)")
 
         # Figure de Matplotlib
         self.fig = Figure(figsize=(8, 3), dpi=100)
@@ -499,14 +514,14 @@ class App(tk.Tk):
 
     def on_quadrant_selected(self, q):
         """
-        Se llama cuando el usuario hace clic en un cuadrante
+        on_quadrant_selected: Se llama cuando el usuario hace clic en un cuadrante
         en la grilla QuadrantSelector. Actualiza quadrant_var con ese valor.
         """
         self.quadrant_var.set(q)
 
-    #------------------------------------------------------------------------------------
+    # ----------------------------------------------
     # LIVE VIEW
-    #------------------------------------------------------------------------------------
+    # ----------------------------------------------
     def open_live_view(self):
         """
         Abre una ventana Toplevel donde se muestra la cámara en vivo, con un botón
@@ -611,7 +626,8 @@ class App(tk.Tk):
 
     def close_live_window(self):
         """
-        Cierra la ventana de Live
+        Cierra la ventana de Live, liberando la cámara y cancelando
+        cualquier actualización pendiente.
         """
         if self.cap:
             self.cap.release()
@@ -622,12 +638,12 @@ class App(tk.Tk):
             self.live_window.destroy()
         self.live_window = None
 
-    # ------------------------------------------------------------------------------------
+    # ----------------------------------------------
     # CARGAR IMAGEN
-    # ------------------------------------------------------------------------------------
+    # ----------------------------------------------
     def select_image(self):
         """
-        diálogo para escoger la imagen desde el disco,
+        select_image: Abre un diálogo para escoger la imagen desde el disco,
         y llama show_original() para mostrarla.
         """
         file_path = filedialog.askopenfilename(
@@ -666,12 +682,12 @@ class App(tk.Tk):
                 self.original_dims_label.config(text="")
             print(e)
 
-    #------------------------------------------------------------------------------------
+    # ----------------------------------------------
     # PROCESAR (con fade in y highlight)
-    #------------------------------------------------------------------------------------
+    # ----------------------------------------------
     def run_full_process(self):
         """
-        Ejecuta toda la secuencia de procesamiento:
+        run_full_process: Ejecuta toda la secuencia de procesamiento:
         1) Convertir imagen a grayscale 400x400 => imagen_in.img
         2) Escribir config.txt con 'imagen_in.img' y el cuadrante
         3) Ejecutar el ensamblador ./procesamiento
@@ -753,10 +769,6 @@ class App(tk.Tk):
         except Exception as e:
             messagebox.showerror("Error", f"Error ejecutando {assembler_exec}:\n{e}")
 
-#------------------------------------------------------------------------------------
-# ANIMACIONES DE PROCESAMIENTO
-#------------------------------------------------------------------------------------
-
     def show_images_in_steps(self, quadrant):
         """
         1) Lee los archivos raw (imagen_in.img, imagen_out.img).
@@ -777,7 +789,7 @@ class App(tk.Tk):
 
     def fade_in_conv(self, quadrant, step=0, steps_fade=6, delay_fade=30):
         """
-        Aparece gradualmente la imagen convertida (arr_conv).
+        fade_in_conv: Aparece gradualmente la imagen convertida (arr_conv).
         También dibuja la cuadrícula (líneas rojas).
         Al terminar, llama a animate_highlight_movement para resaltar el cuadrante.
         """
@@ -838,7 +850,7 @@ class App(tk.Tk):
 
     def fade_in_quad(self, step=0, steps_fade=6, delay_fade=30):
         """
-        Aparece gradualmente la sub-imagen (100x100) del cuadrante seleccionado.
+        fade_in_quad: Aparece gradualmente la sub-imagen (100x100) del cuadrante seleccionado.
         """
         alpha = step / steps_fade
         self.ax_quad.clear()
@@ -863,7 +875,7 @@ class App(tk.Tk):
 
     def fade_in_final(self, step=0, steps_fade=6, delay_fade=30):
         """
-        Despliega gradualmente la imagen final generada por el ensamblador
+        fade_in_final: Despliega gradualmente la imagen final generada por el ensamblador
         (imagen_out.img, 200x200).
         """
         alpha = step / steps_fade
@@ -887,9 +899,9 @@ class App(tk.Tk):
             # Terminó la animación final
             pass
 
-#------------------------------------------------------------------------------------
-# Lectura de archivos RAW
-#------------------------------------------------------------------------------------
+    # ----------------------------------------------
+    # Lectura de archivos RAW
+    # ----------------------------------------------
     def read_raw_grayscale(self, path, width, height):
         """
         Abre un archivo binario con 'width*height' bytes, interpretados como 8 bits (uint8).
@@ -973,7 +985,7 @@ class App(tk.Tk):
 
 def main():
     """
-    Función principal que crea la App y ejecuta el bucle principal de Tkinter.
+    Función principal. Crea la App y ejecuta el bucle principal de Tkinter.
     """
     app = App()
     app.mainloop()
