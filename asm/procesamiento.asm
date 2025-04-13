@@ -3,18 +3,19 @@
 ; Lee la ruta de la imagen + cuadrante desde config.txt, procesa una imagen
 ; de 400x400, extrae un sub-bloque 100x100, interpola a 200x200 y genera
 ; imagen_out.img.
+; v.final xD
 ; **************************************************************************************************************************************************
 
 [bits 64]               ; Usaremos instrucciones e interfaces de 64 bits
-default rel             ; Activamos direccionamiento  por defecto (recomendado en x86_64)
+default rel             ; Activamos direccionamiento  por defecto
 
-global _start           ; Define el símbolo _start como global para que sea el punto de entrada
+global _start           ; punto de entrada
 
 
 
 
 ; *****************************************************************SECTION.DATA***************************************************************
-; Datos estáticos (para variables inmutables o inicializadas)
+; Datos estáticos (para variables)
 ; **********************************************************************************************************************************************
 
 section .data           
@@ -44,14 +45,14 @@ section .data
 
     msg_error_config db "Error: config.txt malescrito o cuadrante invalido.", 10, 0  ;Mensaje de error si el config.txt está mal formateado o el cuadrante es inválido
     
-    msg_error_config_end:                      ; ^ Etiqueta para calcular tamaño de msg_error_config
+    msg_error_config_end:                      ; Etiqueta para calcular tamaño de msg_error_config
     
     
     
     
     
 ; *******************************************************************SECCIÓN .BSS*************************************************************
-; Reserva de espacio en memoria sin inicializar
+; Reserva de espacio en memoria
 ; **********************************************************************************************************************************************
 
 
@@ -75,7 +76,7 @@ section .bss
 
     path_buffer     resb 240           ;  Buffer de 240 bytes para guardar la ruta de la imagen leída de config.txt
 
-    quad_input      resb 4             ;  Buffer de 4 bytes para almacenar la cadena que representa el cuadrante (p.ej., "12")
+    quad_input      resb 4             ;  Buffer de 4 bytes para almacenar la cadena que representa el cuadrante (ej, "12")
     
 
 
@@ -141,7 +142,7 @@ _start:
 
     mov rax, 0               ; Indica que usaremos la syscall sys_read (leer archivo)
     mov rdi, rbx             ; Descriptor de archivo (segundo argumento) es un número que el s.o usa para identificar el archivo abierto
-    mov rsi, buffer          ; Dirección donde se almacenará lo leído (tercer argumento)
+    mov rsi, buffer          ; Dirección donde se almacenará lo leído 
     mov rdx, 400*400         ; Número de bytes a leer (160,000 = 400*400)
     syscall                  ; Llama al sistema para leer
     cmp rax, 0               ; Verifica si la lectura fue exitosa (rax < 0 => error)
@@ -254,6 +255,10 @@ _start:
 ; 4. Ponemos r11 a cero para usarlo como contador de columnas dentro de la fila.
 ; ******************************************************************************
 
+;“base” me refiero a los desplazamientos o los índices digamos aplicados en la imagen completa
+;“local” me refiero a los índices de la posición dentro del sub-bloque de 100×100.
+
+
 copy_rows:
     cmp r8, r13              ; Compara el contador de filas copiadas (r8) con 100 (r13).
     jge done_copy            ; Si r8 >= 100, significa que ya copiamos todas las filas, saltamos a done_copy.
@@ -355,6 +360,15 @@ done_copy:
  ; **************************************************************************************************************************************************
 
 ; PASOS GENERALES:
+; tenemos 2 bucles...
+; Bucle externo (interp_outer_row): Recorre las filas (row_var = 0..99) del sub‐bloque. Cada vez que se cambia de fila se reinicia la variable 
+; de columna (col_var = 0). Al llegar a row = 100, significa que se han procesado todas las filas y el algoritmo termina.
+
+; Bucle interno (interp_inner_col): Para cada fila fijada por el bucle externo, se recorre las columnas (col_var = 0..99).
+; Este es el bucle que realmente hace la interpolación píxel por píxel, calculando los valores A, B, C, D y escribiendo los nuevos píxeles 
+; resultantes (2×2) en la imagen de salida.
+
+Cuando col alcanza 100, termina el procesamiento de columnas para esa fila y se regresa al bucle externo para pasar a la siguiente fila.
 ; 1. Recorrer filas 0..99 del sub‐bloque (bucle externo).
 ; 2. Para cada fila, se recorre columnas 0..99 (bucle interno).
 ; 3. Identificar si hay fila siguiente (r < 99) y columna siguiente (c < 99).
@@ -374,7 +388,7 @@ done_copy:
 ; EXPLICACION DETALLADA
 
 ; Se parte de un sub‐bloque de dimensión 100×100 (1 byte/píxel), y se genera una imagen de 200×200, duplicando ancho y alto. 
-; Para cada píxel en coordenadas (𝑟,𝑐) del sub‐bloque, se genera un bloque 2×2 en la imagen resultante, haciendo promedios de píxeles 
+; Para cada píxel en coordenadas (r,c) del sub‐bloque, se genera un bloque 2×2 en la imagen resultante, haciendo promedios de píxeles 
 ; vecinos (A, B, C, D) para lograr un suavizado.
 
 ; Digamos que en un píxel central r,c en el sub‐bloque. Al escalar la imagen no solo usamos el valor de  (r,c), 
@@ -443,7 +457,7 @@ done_copy:
 ; 1  |  B  |  D  |
 ;    +-----+-----+
 
-; Suponiendo que este bloque 2×2 es el inicial (fila=0..1, col=0..1), la parte resultante (2×2) en la imagen final se ve así:
+; Digamos que este bloque 2×2 es el inicial (fila=0..1, col=0..1), la parte resultante (2×2) en la imagen final se ve algo así:
 ;   +------------------------+------------------------+
 ;   |          A             |      (3A + C)/4        |
 ;   +------------------------+------------------------+
@@ -1040,7 +1054,7 @@ csum_interp_done:
 ; -----------------------------------------------------------------------------
 ; Esta función abre el archivo "config.txt" en modo lectura, lee hasta 256 bytes 
 ; en el buffer config_buffer y luego cierra el archivo. También limpia dos 
-; registros (rcx y rdx) para su uso posterior.
+; registros (rcx y rdx) porque lo usamos luego
 ; =============================================================================
 
 
@@ -1115,7 +1129,7 @@ read_config_from_file:
 ; Al encontrar '\n', se cierra la cadena en path_buffer y se avanza.
 ; Aquí finalizamos la ruta poniendo un carácter nulo en path_buffer, para indicar
 ; el fin de cadena, e incrementamos rcx para avanzar en config_buffer. Luego 
-; reiniciamos rdx a cero para su uso posterior.
+; reiniciamos rdx a cero para usarlo luego
 ; =============================================================================
 
 
