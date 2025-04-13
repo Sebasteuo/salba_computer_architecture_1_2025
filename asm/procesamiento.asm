@@ -368,7 +368,7 @@ done_copy:
 ; Este es el bucle que realmente hace la interpolación píxel por píxel, calculando los valores A, B, C, D y escribiendo los nuevos píxeles 
 ; resultantes (2×2) en la imagen de salida.
 
-Cuando col alcanza 100, termina el procesamiento de columnas para esa fila y se regresa al bucle externo para pasar a la siguiente fila.
+; Cuando col alcanza 100, termina el procesamiento de columnas para esa fila y se regresa al bucle externo para pasar a la siguiente fila.
 ; 1. Recorrer filas 0..99 del sub‐bloque (bucle externo).
 ; 2. Para cada fila, se recorre columnas 0..99 (bucle interno).
 ; 3. Identificar si hay fila siguiente (r < 99) y columna siguiente (c < 99).
