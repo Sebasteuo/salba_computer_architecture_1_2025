@@ -1,2 +1,2 @@
 imagen_in.img
-8
+6
